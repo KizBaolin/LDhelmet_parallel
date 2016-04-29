@@ -105,6 +105,11 @@ class RTask {
 
   std::pair<uint64_t, uint64_t> snp_partition_overlap_;
   std::pair<uint64_t, uint64_t> snp_partition_;
+
+  // parallel tempering options
+  uint32_t num_mcmc_chains_;
+  double temp_const_;
+  uint32_t num_iter_swap_;
 };
 
 #endif  // LDHELMET_RJMCMC_R_TASK_H_

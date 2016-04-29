@@ -65,6 +65,11 @@ class CmdLineOptionsRjmcmc : public CmdLineOptions {
   double max_lk_end_;
   double max_lk_resolution_;
 
+  // parallel tempering stuff
+  uint32_t num_mcmc_chains_;
+  double temp_const_;
+  uint32_t num_iter_swap_;
+
  private:
   std::string GetUsageString(std::string const base_command,
                              std::string const program_name) const;

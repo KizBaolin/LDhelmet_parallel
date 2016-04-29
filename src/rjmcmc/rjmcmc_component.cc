@@ -161,7 +161,11 @@ int RjmcmcComponent(std::string const base_command, int argc, char **argv) {
                          cmd_line_options.window_size_,
                          cmd_line_options.stats_thin_,
                          snp_partitions_overlap[partition_id],
-                         snp_partitions[partition_id]);
+                         snp_partitions[partition_id],
+                         // parallel tempering options
+                         cmd_line_options.num_mcmc_chains_,
+                         cmd_line_options.temp_const_,
+                         cmd_line_options.num_iter_swap_);
 
         io_service.post(model_task);
       }

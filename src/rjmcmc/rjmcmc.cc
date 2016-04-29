@@ -51,7 +51,11 @@ Rjmcmc::Rjmcmc(
     uint64_t stats_thin,
     uint64_t partition_start,
     uint64_t partition_end,
-    std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store)
+    std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store,
+    // parallel tempering options
+    uint32_t num_mcmc_chains,
+    double temp_const,
+    uint32_t num_iter_swap)
     : rng_(seed),
       uniform_gen_(rng_.GetUniformGen(0.0, 1.0)),
       rate_change_gen_(rng_.GetUniformGen(-0.5, 0.5)),
@@ -67,7 +71,11 @@ Rjmcmc::Rjmcmc(
       post_rho_map_(snp_pos_.size()),
       partition_start_(partition_start),
       partition_end_(partition_end),
-      sample_store_(sample_store) {
+      sample_store_(sample_store),
+      // parallel tempering options
+      num_mcmc_chains_(num_mcmc_chains),
+      temp_const_(temp_const),
+      num_iter_swap_(num_iter_swap) {
   // SNP position file needs at least 2 positions.
   if (snp_pos_.size() < 2) {
     fprintf(stderr, "Need at least 2 SNPs.\n");
