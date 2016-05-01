@@ -74,7 +74,10 @@ class RTask {
          uint32_t window_size,
          uint64_t stats_thin,
          std::pair<uint64_t, uint64_t> const &snp_partition_overlap,
-         std::pair<uint64_t, uint64_t> const &snp_partition);
+         std::pair<uint64_t, uint64_t> const &snp_partition,
+         uint32_t num_mcmc_chains,
+         double temp_const,
+         uint32_t num_iter_swap);
 
   void operator()();
 

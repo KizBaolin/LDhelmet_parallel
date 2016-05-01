@@ -49,7 +49,10 @@ class Rjmcmc {
          uint64_t stats_thin,
          uint64_t partition_start,
          uint64_t partition_end,
-         std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store);
+         std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store,
+         uint32_t num_mcmc_chains,
+         double temp_const,
+         uint32_t num_iter_swap);
 
   // Run iterations.
   void run();
