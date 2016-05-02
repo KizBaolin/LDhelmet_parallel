@@ -33,11 +33,12 @@ LIB_FLAG = -L/usr/lib
 ########
 
 CC = g++
+OPENMP = -fopenmp
 CFLAGS = -std=c++11 -w -Wall -O3 -Isrc $(INC_FLAG)
 LFLAGS = $(LIB_FLAG)
 
 #LIB = -lboost_thread-mt -lboost_program_options-mt -lboost_system-mt -lgsl -lgslcblas # mac version
-LIB = -lboost_thread -lboost_program_options -lboost_system -lgsl -lgslcblas
+LIB = -fopenmp -lboost_thread -lboost_program_options -lboost_system -lgsl -lgslcblas
 
 all: build_dir ldhelmet
 
@@ -236,7 +237,7 @@ build/rjmcmc/post_rho_map.o: src/rjmcmc/post_rho_map.cc src/rjmcmc/post_rho_map.
 	$(CC) $(CFLAGS) -c -o build/rjmcmc/post_rho_map.o src/rjmcmc/post_rho_map.cc
 
 build/rjmcmc/rjmcmc.o: src/rjmcmc/rjmcmc.cc src/rjmcmc/rjmcmc.h src/common/binary_search.h src/common/load_data.h src/common/log_lk_computer.h src/common/seq_process.h src/rjmcmc/acceptance_log.h src/rjmcmc/post_rho_map.h src/rjmcmc/priors.h src/rjmcmc/proposals.h src/rjmcmc/ran_num_gen.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/rjmcmc.o src/rjmcmc/rjmcmc.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/rjmcmc.o src/rjmcmc/rjmcmc.cc
 
 build/rjmcmc/proposals.o: src/rjmcmc/proposals.cc src/rjmcmc/proposals.h
 	$(CC) $(CFLAGS) -c -o build/rjmcmc/proposals.o src/rjmcmc/proposals.cc
