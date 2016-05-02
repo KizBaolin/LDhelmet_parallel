@@ -26,6 +26,7 @@
 #include <utility>
 #include <vector>
 #include <omp.h>
+#include <inttypes.h>
 
 #include "common/binary_search.h"
 #include "common/load_data.h"
@@ -137,11 +138,14 @@ Rjmcmc::Rjmcmc(
 }
 
 void Rjmcmc::run() {
+  uint64_t iteration_id_local = 0;
+
   burn_in_p_ = true;  // Needed for acceptance logger.
   for (uint32_t iteration = 0; iteration < burn_in_; ++iteration) {
-    Update();
+    Update(iteration_id_local);
     assert(change_points_.size() >= 2);
   }
+  printf("After burn in %" PRId64 "\n", iteration_id_local);
 
   burn_in_p_ = false;  // Needed for acceptance logger.
 
@@ -167,7 +171,7 @@ void Rjmcmc::run() {
   int rank, rank_partner;
 
   /* Fork a team of threads giving them their own copies of variables */
-  #pragma omp parallel private(nthreads, rank, rank_partner) shared(T, lpost_new, lpost)
+  #pragma omp parallel private(nthreads, rank, rank_partner, iteration_id_local) shared(T, lpost_new, lpost)
   {
     /* Obtain thread number */
     rank = omp_get_thread_num();
@@ -178,11 +182,16 @@ void Rjmcmc::run() {
         RecordSample();
       }
 
-      Update();
+      Update(iteration_id_local);
       assert(change_points_.size() >= 2);
 
       post_rho_map_.Update(snp_pos_, cum_rho_map_);
     }
+    
+    printf("After running %" PRId64 "\n", iteration_id_local);
+
+    //Reset class data members
+    iteration_id_ = iteration_id_local;
 
     // #pragma omp barrier      //Synchronise Threads
 
@@ -204,7 +213,7 @@ void Rjmcmc::run() {
 
 }
 
-void Rjmcmc::Update() {
+void Rjmcmc::Update(uint64_t& iteration_id_local) {
   double uniform_variate = uniform_gen_();
   if (uniform_variate < proposals_.cum_.change) {
     PerformChange();
@@ -218,7 +227,8 @@ void Rjmcmc::Update() {
     fprintf(stderr, "Error in proposal distribution in Update().\n");
   }
 
-  ++iteration_id_;
+  // ++iteration_id_;
+  ++iteration_id_local;
 }
 
 void Rjmcmc::PerformChange() {

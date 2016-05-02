@@ -58,7 +58,8 @@ class Rjmcmc {
   void run();
 
   // Update MCMC state.
-  void Update();
+  void Update(uint64_t& iteration_id_local);
+  // void Update();
 
   // Change rate of block.
   void PerformChange();
