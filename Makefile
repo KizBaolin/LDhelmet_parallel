@@ -29,14 +29,13 @@ LIB_FLAG =
 #INC_FLAG = -I/home/gradstud/myBoost/include -I/home/gradstud/myGSL/include
 #LIB_FLAG = -L/home/gradstud/myBoost/lib -L/home/gradstud/myGSL/lib
 
-#
-########
 
 CC = g++
 OPENMP = -fopenmp
 CFLAGS = -std=c++11 -w -Wall -O3 -Isrc $(INC_FLAG)
 LFLAGS = $(LIB_FLAG)
 
+#LIB = -lboost_thread-mt -lboost_program_options-mt -lboost_system-mt -lgsl -lgslcblas # mac version
 LIB = -fopenmp -lboost_thread -lboost_program_options -lboost_system -lgsl -lgslcblas
 
 all: build_dir ldhelmet
