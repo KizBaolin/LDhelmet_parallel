@@ -99,7 +99,11 @@ RTask::RTask(
     uint32_t window_size,
     uint64_t stats_thin,
     std::pair<uint64_t, uint64_t> const &snp_partition_overlap,
-    std::pair<uint64_t, uint64_t> const &snp_partition)
+    std::pair<uint64_t, uint64_t> const &snp_partition,
+    //parallel tempering options
+    uint32_t num_mcmc_chains,
+    double temp_const,
+    uint32_t num_iter_swap)
     : r_task_counter_(r_task_counter),
       partition_id_(partition_id),
       result_store_(result_store),
@@ -120,7 +124,11 @@ RTask::RTask(
       window_size_(window_size),
       stats_thin_(stats_thin),
       snp_partition_overlap_(snp_partition_overlap),
-      snp_partition_(snp_partition) { }
+      snp_partition_(snp_partition),
+      // parallel tempering options
+      num_mcmc_chains_(num_mcmc_chains),
+      temp_const_(temp_const),
+      num_iter_swap_(num_iter_swap){ }
 
 void RTask::operator()() {
   assert(snp_partition_overlap_.second
@@ -172,7 +180,10 @@ void RTask::operator()() {
                stats_thin_,
                partition_start,
                partition_end,
-               sample_store_);
+               sample_store_,
+               num_mcmc_chains_,
+               temp_const_,
+               num_iter_swap_);
 
   printf("MCMC run for partition %d.\n", static_cast<int>(partition_id_));
 

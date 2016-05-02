@@ -28,7 +28,6 @@
 #include "post_to_text/post_to_text_component.h"
 #include "rjmcmc/rjmcmc_component.h"
 #include "table_gen/table_gen_component.h"
-#include "convert_table/convert_table_component.h"
 
 typedef int (*ComponentType)(std::string, int, char **);
 
@@ -42,8 +41,6 @@ int main(int argc, char **argv) {
     ("find_confs", &FindConfsComponent));
   components.push_back(std::pair<std::string, ComponentType>
     ("table_gen", &TableGenComponent));
-  components.push_back(std::pair<std::string, ComponentType>
-    ("convert_table", &ConvertTableComponent));
   components.push_back(std::pair<std::string, ComponentType>
     ("pade", &PadeComponent));
   components.push_back(std::pair<std::string, ComponentType>

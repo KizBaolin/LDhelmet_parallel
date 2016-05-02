@@ -39,6 +39,9 @@ static uint64_t const kDefaultOverlapLength = 200;
 static double const kDefaultMaxLkStart = 0.001;
 static double const kDefaultMaxLkEnd = 0.3;
 static double const kDefaultMaxLkResolution = 0.001;
+static uint32_t const kDefaultNumChains = 1;
+static double const kDefaultTempConst = 1.3;
+static uint32_t const kDefaultSwap = 1;
 
 CmdLineOptionsRjmcmc::CmdLineOptionsRjmcmc(std::string const base_command,
                                            int argc,
@@ -136,7 +139,20 @@ CmdLineOptionsRjmcmc::CmdLineOptionsRjmcmc(std::string const base_command,
      boost::program_options::value<double>(&max_lk_resolution_)
        ->default_value(kDefaultMaxLkResolution),
      "Amount to increment by for maximum likelihood estimation "
-     "of background rate.");
+     "of background rate.")
+    // adding parallel tempering parameters
+    ("num_mcmc_chains",
+     boost::program_options::value<uint32_t>(&num_mcmc_chains_)
+       ->default_value(kDefaultNumChains),
+     "The number of rjMCMC chains for parallel temmpering.")
+    ("temp_const",
+     boost::program_options::value<double>(&temp_const_)
+       ->default_value(kDefaultTempConst),
+     "The temperature constant for parallel tempering.")
+    ("num_iter_per_swap",
+     boost::program_options::value<uint32_t>(&num_iter_swap_)
+       ->default_value(kDefaultSwap),
+     "The number of iterations per swap proposal");
 
   success_ = ParseOptions(base_command, argc, argv, version);
 }

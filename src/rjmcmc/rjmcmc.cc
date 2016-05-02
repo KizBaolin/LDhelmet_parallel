@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <utility>
 #include <vector>
+#include <omp.h>
 
 #include "common/binary_search.h"
 #include "common/load_data.h"
@@ -51,7 +52,11 @@ Rjmcmc::Rjmcmc(
     uint64_t stats_thin,
     uint64_t partition_start,
     uint64_t partition_end,
-    std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store)
+    std::vector<std::vector<std::pair<uint64_t, double> > > &sample_store,
+    // parallel tempering options
+    uint32_t num_mcmc_chains,
+    double temp_const,
+    uint32_t num_iter_swap)
     : rng_(seed),
       uniform_gen_(rng_.GetUniformGen(0.0, 1.0)),
       rate_change_gen_(rng_.GetUniformGen(-0.5, 0.5)),
@@ -67,7 +72,11 @@ Rjmcmc::Rjmcmc(
       post_rho_map_(snp_pos_.size()),
       partition_start_(partition_start),
       partition_end_(partition_end),
-      sample_store_(sample_store) {
+      sample_store_(sample_store),
+      // parallel tempering options
+      num_mcmc_chains_(num_mcmc_chains),
+      temp_const_(temp_const),
+      num_iter_swap_(num_iter_swap) {
   // SNP position file needs at least 2 positions.
   if (snp_pos_.size() < 2) {
     fprintf(stderr, "Need at least 2 SNPs.\n");
@@ -136,16 +145,63 @@ void Rjmcmc::run() {
 
   burn_in_p_ = false;  // Needed for acceptance logger.
 
-  for (uint32_t iteration = 0; iteration < num_iter_; ++iteration) {
-    if (iteration % stats_thin_ == 0) {
-      RecordSample();
+  //*****************************************Parallel Tempering stuff******************************//
+  int nthreads = 1;
+
+  printf("Number of threads = %d\n", nthreads);
+
+  omp_set_num_threads(nthreads);
+
+  std::vector<double> T;
+  std::vector<double> lpost_new;
+  std::vector<double> lpost;
+  T.resize(nthreads);
+  lpost_new.resize(nthreads);
+  lpost.resize(nthreads);
+
+  for (int i = 0; i < nthreads; ++i)
+  {
+    T[i]=pow(i,temp_const_);
+  }
+
+  int rank, rank_partner;
+
+  /* Fork a team of threads giving them their own copies of variables */
+  #pragma omp parallel private(nthreads, rank, rank_partner) shared(T, lpost_new, lpost)
+  {
+    /* Obtain thread number */
+    rank = omp_get_thread_num();
+    printf("Hello World from thread = %d\n", rank);
+
+    for (uint32_t iteration = 0; iteration < num_iter_; ++iteration) {
+      if (rank == 0) {
+        RecordSample();
+      }
+
+      Update();
+      assert(change_points_.size() >= 2);
+
+      post_rho_map_.Update(snp_pos_, cum_rho_map_);
     }
 
-    Update();
-    assert(change_points_.size() >= 2);
+    // #pragma omp barrier      //Synchronise Threads
 
-    post_rho_map_.Update(snp_pos_, cum_rho_map_);
-  }
+    // /******************************************Inter-Thread Parallel Tempering**************/
+    // #pragma omp critical     //Executed Critical Code Block Oney Thread at a Time. 
+    // {
+    //   double random_num = ((double) rand() / (RAND_MAX));
+
+    //   rank_partner = rank + 1;
+    //   if(rank_partner < nthreads) {
+    //     lalpha = (B[rank]-B[rank_partner])*(lpost[rank_partner]-lpost[rank]);
+    //     if(0.5 < lalpha){
+    //       swap(B[rank],B[rank_partner]);
+    //     }
+    //   }
+    // }
+
+  }  /* All threads join master thread and disband */
+
 }
 
 void Rjmcmc::Update() {

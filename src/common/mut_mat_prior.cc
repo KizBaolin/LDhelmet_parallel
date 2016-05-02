@@ -53,7 +53,7 @@ MutationMatrix LoadMutationMatrixHelper(std::string const &mut_mat_file) {
   if (fp == NULL) {
     fprintf(stderr,
             "Unable to open mutation matrix file: %s.\n", mut_mat_file.c_str());
-    exit(1);
+    std::exit(1);
   }
 
   MutationMatrix mut_mat;
@@ -62,7 +62,7 @@ MutationMatrix LoadMutationMatrixHelper(std::string const &mut_mat_file) {
       int number_read = fscanf(fp, "%lf", &mut_mat[i][j]);
       if (feof(fp) || ferror(fp) || number_read != 1) {
         fprintf(stderr, "Mutation matrix file has too few elements.\n");
-        exit(1);
+        std::exit(1);
       }
     }
   }
@@ -71,7 +71,7 @@ MutationMatrix LoadMutationMatrixHelper(std::string const &mut_mat_file) {
   int number_read = fscanf(fp, "%*f");
   if (number_read != -1) {
     fprintf(stderr, "Mutation matrix file has too many elements.\n");
-    exit(1);
+    std::exit(1);
   }
 
   return NormalizedMutMatrix(mut_mat);
@@ -119,7 +119,7 @@ Prior LoadPriorHelper(std::string const &prior_file_name,
   if (fp == NULL) {
     fprintf(stderr,
             "Unable to open prior file: %s.\n", prior_file_name.c_str());
-    exit(1);
+    std::exit(1);
   }
 
   Prior prior;
@@ -135,7 +135,7 @@ Prior LoadPriorHelper(std::string const &prior_file_name,
     if (number_read != 5) {
       fprintf(stderr,
               "Problem reading in ancestral prior entries.\n");
-      exit(1);
+      std::exit(1);
     }
 
     if (cur_prior[0] < 0 ||
@@ -144,7 +144,7 @@ Prior LoadPriorHelper(std::string const &prior_file_name,
       cur_prior[3] < 0) {
       fprintf(stderr,
               "Prior must have non-negative entries.\n");
-      exit(1);
+      std::exit(1);
     }
 
     // Normalize prior.
@@ -162,7 +162,7 @@ Prior LoadPriorHelper(std::string const &prior_file_name,
               "The ancestral prior file is missing the prior for a SNP "
               "in the sequence file, or the ancestral priors are not "
               "ordered in increasing genomic position.");
-      exit(1);
+      std::exit(1);
     }
 
     if (snp_pos1 == *pos_iter) {

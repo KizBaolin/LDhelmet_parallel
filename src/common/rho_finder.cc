@@ -25,7 +25,7 @@ RhoGrid ParseRhoRange(std::vector<double> const &rho_range) {
   if (rho_range.size() % 2 == 0 || rho_range.size() == 0) {
     fprintf(stderr,
             "Rho range is invalid.\n");
-    exit(1);
+    std::exit(1);
   }
 
   RhoGrid rho_grid;
@@ -56,8 +56,6 @@ RhoFinder::RhoFinder(RhoGrid const& rho_grid)
   assert(index_splits_.size() == rho_points.size());
 }
 
-//returns the index of the largest rho in rho_grid
-//that is less than or equal to rho_value
 size_t RhoFinder::GetRhoID(double rho_value) const {
   assert(rho_value >= 0);
 
@@ -70,30 +68,24 @@ size_t RhoFinder::GetRhoID(double rho_value) const {
             "the lookup table. "
             "This indicates a problem with the lookup table. "
             "The lookup table must include rho value 0.0.\n");
-    exit(1);
+    std::exit(1);
   }
 
   for (size_t i = 0; i < rho_points.size() - 1; ++i) {
     double truncated_rho_value = std::floor(rho_value / deltas[i]) * deltas[i];
-      if (truncated_rho_value > rho_value) {
-          assert(truncated_rho_value - rho_value < 1e-10);
-          truncated_rho_value = rho_value;
-      }
-      if (rho_value - truncated_rho_value > (1-1e-10)*deltas[i]){
-          truncated_rho_value += deltas[i];
-      }
-      if (truncated_rho_value < rho_points[i+1]){
-          int offset = static_cast<int>((truncated_rho_value - rho_points[i])
-                                        / deltas[i] + 0.5);
-          size_t rho_id = index_splits_[i] + offset;
-          assert(rho_id >= 0);
-          assert(rho_id < rho_list_.size());
-          assert(rho_value > rho_list_[rho_id] - 1e-10);
-          assert(rho_value < rho_list_[rho_id+1]);
-          return rho_id;
-      }
+
+    if (truncated_rho_value < rho_points[i + 1]) {
+      int offset = static_cast<int>((truncated_rho_value - rho_points[i])
+                                    / deltas[i] + 0.5);
+      size_t rho_id = index_splits_[i] + offset;
+
+      assert(rho_id >= 0);
+      assert(truncated_rho_value >= rho_list_[rho_id]);
+      assert(rho_id < rho_list_.size());
+
+      return rho_id;
+    }
   }
-  assert(rho_value > rho_list_[rho_list_.size() - 1] - 1e-10);
   return rho_list_.size() - 1;
 }
 
@@ -111,17 +103,17 @@ std::vector<double> GetRhoList(RhoGrid const &rho_grid) {
     if (delta <= 0.0) {
       fprintf(stderr,
               "Rho range is invalid. Delta between rhos is non-positive.\n");
-      exit(1);
+      std::exit(1);
     }
     if (rho_points[i + 1] <= rho_points[i]) {
       fprintf(stderr,
               "Rho range is invalid. "
               "Rho values are not monotonically increasing.\n");
-      exit(1);
+      std::exit(1);
     }
     size_t rho_multiplier = 0;
     double cur_rho = base_rho + rho_multiplier * delta;
-    while (cur_rho < rho_points[i + 1] - 1e-10) {
+    while (cur_rho < rho_points[i + 1]) {
       rho_list.push_back(cur_rho);
       ++rho_multiplier;
       cur_rho = base_rho + static_cast<double>(rho_multiplier) * delta;
@@ -136,7 +128,7 @@ std::vector<double> GetRhoList(RhoGrid const &rho_grid) {
     if (rho_list[rho_id] < rho_list[rho_id - 1]) {
       fprintf(stderr,
               "Rho values must be in increasing order.");
-      exit(1);
+      std::exit(1);
     }
   }
 

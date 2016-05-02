@@ -21,8 +21,8 @@
 // *VERSION_STRING : string of version number appropriate for display
 // *_VERSION_OUTPUT: version of file output format
 
-#define VERSION_NUMBER              18L
-#define VERSION_STRING              "1.8"
+#define VERSION_NUMBER              17L
+#define VERSION_STRING              "1.7"
 
 #define FIND_CONFS_VERSION          10L
 #define FIND_CONFS_VERSION_STRING   "1.0"

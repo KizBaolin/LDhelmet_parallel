@@ -43,23 +43,18 @@ double LogLkComputer::ComputeLogLkFromSites(double genetic_distance,
 
   size_t left_rho_id = site_map_log_lk_.rho_finder_.GetRhoID(genetic_distance);
   size_t right_rho_id = left_rho_id + 1;
-  double left_conf_log_lk =  GetLogLk(site0, site1, left_rho_id);
-  double right_conf_log_lk;
-  double left_distance = genetic_distance - site_map_log_lk_.rho_finder_.rho_list_[left_rho_id];
-  double right_distance;
+
+  double conf_log_lk;
+
   if (right_rho_id < site_map_log_lk_.rho_finder_.rho_list_.size()) {
-    right_conf_log_lk = GetLogLk(site0, site1, right_rho_id);
-    right_distance = site_map_log_lk_.rho_finder_.rho_list_[right_rho_id] - genetic_distance;
+    conf_log_lk = GetLogLk(site0, site1, right_rho_id);
   } else {
-    assert(right_rho_id == site_map_log_lk_.rho_finder_.rho_list_.size());
-    return GetLogLk(site0, site1, right_rho_id - 1);
-    
+    size_t rho_id_truncate =
+      site_map_log_lk_.rho_finder_.rho_list_.size() - 1;
+    conf_log_lk = GetLogLk(site0, site1, rho_id_truncate);
   }
-  assert(left_distance + right_distance > 0);
-  //interpolate
-  double conf_log_lk = (right_distance * left_conf_log_lk + left_distance * right_conf_log_lk)
-                                                / (left_distance + right_distance);
-  assert(conf_log_lk <= 0.0);
+
+  assert(conf_log_lk <= 1.0);
   assert(!std::isinf(conf_log_lk));
   assert(!std::isnan(conf_log_lk));
 

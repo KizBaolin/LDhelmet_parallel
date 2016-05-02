@@ -24,20 +24,20 @@
 # Uncomment and change these variables as necessary.
 #
 
-#INC_FLAG =
-#LIB_FLAG =
-INC_FLAG = -I/usr/include/gsl -I/usr/include/boost
-LIB_FLAG = -L/usr/lib
+INC_FLAG =
+LIB_FLAG =
+#INC_FLAG = -I/home/gradstud/myBoost/include -I/home/gradstud/myGSL/include
+#LIB_FLAG = -L/home/gradstud/myBoost/lib -L/home/gradstud/myGSL/lib
 
 #
 ########
 
 CC = g++
+OPENMP = -fopenmp
 CFLAGS = -std=c++11 -w -Wall -O3 -Isrc $(INC_FLAG)
 LFLAGS = $(LIB_FLAG)
 
-#LIB = -lboost_thread-mt -lboost_program_options-mt -lboost_system-mt -lgsl -lgslcblas # mac version
-LIB = -lboost_thread -lboost_program_options -lboost_system -lgsl -lgslcblas
+LIB = -fopenmp -lboost_thread -lboost_program_options -lboost_system -lgsl -lgslcblas
 
 all: build_dir ldhelmet
 
@@ -172,19 +172,6 @@ build/table_gen/table_management.o: src/table_gen/table_management.cc src/table_
 build/table_gen/single_locus.o: src/table_gen/single_locus.cc src/table_gen/single_locus.h src/common/conf.h src/common/ncr.h
 	$(CC) $(CFLAGS) -c -o build/table_gen/single_locus.o src/table_gen/single_locus.cc
 
-# convert_table
-
-convert_table: convert_table_dir build/convert_table/convert_table_options.o build/convert_table/convert_table_component.o
-
-convert_table_dir:
-	mkdir -p build/convert_table
-
-build/convert_table/convert_table_options.o: src/convert_table/convert_table_options.cc src/convert_table/convert_table_options.h src/common/command_line_options.h
-	$(CC) $(CFLAGS) -c -o build/convert_table/convert_table_options.o src/convert_table/convert_table_options.cc
-
-build/convert_table/convert_table_component.o: src/convert_table/convert_table_component.cc src/convert_table/convert_table_component.h src/convert_table/convert_table_options.h src/common/conf_gen.h src/table_gen/output_writer.h src/common/predicates.h src/common/read_confs.h src/common/rho_finder.h src/common/version_number.h src/table_gen/table_management.h
-	$(CC) $(CFLAGS) -c -o build/convert_table/convert_table_component.o src/convert_table/convert_table_component.cc
-
 # pade
 
 pade: pade_dir build/pade/pade_options.o build/pade/pade_component.o build/pade/subtable.o build/pade/coeff.o build/pade/compute_g.o build/pade/one_locus.o
@@ -218,35 +205,35 @@ rjmcmc_dir:
 	mkdir -p build/rjmcmc
 
 build/rjmcmc/rjmcmc_options.o: src/rjmcmc/rjmcmc_options.cc src/rjmcmc/rjmcmc_options.h src/common/command_line_options.h src/rjmcmc/rjmcmc_options.h src/rjmcmc/ran_num_gen.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/rjmcmc_options.o src/rjmcmc/rjmcmc_options.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/rjmcmc_options.o src/rjmcmc/rjmcmc_options.cc
 
 build/rjmcmc/rjmcmc_component.o: src/rjmcmc/rjmcmc_component.cc src/rjmcmc/rjmcmc_component.h src/common/load_data.h src/common/seq_file_parse.h src/common/seq_process.h src/common/version_number.h src/rjmcmc/handle_output.h src/rjmcmc/r_task.h src/rjmcmc/ran_num_gen.h src/rjmcmc/rjmcmc.h src/rjmcmc/rjmcmc_options.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/rjmcmc_component.o src/rjmcmc/rjmcmc_component.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/rjmcmc_component.o src/rjmcmc/rjmcmc_component.cc
 
 build/rjmcmc/handle_output.o: src/rjmcmc/handle_output.cc src/rjmcmc/handle_output.h src/common/snp_partitions.h src/common/mut_mat_prior.h src/rjmcmc/rjmcmc_options.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/handle_output.o src/rjmcmc/handle_output.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/handle_output.o src/rjmcmc/handle_output.cc
 
 build/rjmcmc/r_task.o: src/rjmcmc/r_task.cc src/rjmcmc/r_task.h src/common/lk_pade_table.h src/common/mut_mat_prior.h src/rjmcmc/acceptance_log.h src/rjmcmc/handle_output.h src/rjmcmc/priors.h src/rjmcmc/proposals.h src/rjmcmc/ran_num_gen.h src/rjmcmc/rjmcmc.h 
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/r_task.o src/rjmcmc/r_task.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/r_task.o src/rjmcmc/r_task.cc
 
 build/rjmcmc/acceptance_log.o: src/rjmcmc/acceptance_log.cc src/rjmcmc/acceptance_log.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/acceptance_log.o src/rjmcmc/acceptance_log.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/acceptance_log.o src/rjmcmc/acceptance_log.cc
 
 build/rjmcmc/post_rho_map.o: src/rjmcmc/post_rho_map.cc src/rjmcmc/post_rho_map.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/post_rho_map.o src/rjmcmc/post_rho_map.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/post_rho_map.o src/rjmcmc/post_rho_map.cc
 
 build/rjmcmc/rjmcmc.o: src/rjmcmc/rjmcmc.cc src/rjmcmc/rjmcmc.h src/common/binary_search.h src/common/load_data.h src/common/log_lk_computer.h src/common/seq_process.h src/rjmcmc/acceptance_log.h src/rjmcmc/post_rho_map.h src/rjmcmc/priors.h src/rjmcmc/proposals.h src/rjmcmc/ran_num_gen.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/rjmcmc.o src/rjmcmc/rjmcmc.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/rjmcmc.o src/rjmcmc/rjmcmc.cc
 
 build/rjmcmc/proposals.o: src/rjmcmc/proposals.cc src/rjmcmc/proposals.h
-	$(CC) $(CFLAGS) -c -o build/rjmcmc/proposals.o src/rjmcmc/proposals.cc
+	$(CC) $(OPENMP) $(CFLAGS) -c -o build/rjmcmc/proposals.o src/rjmcmc/proposals.cc
 
 # ldhelmet
 
-ldhelmet: build/ldhelmet.o common find_confs table_gen post_to_text max_lk pade rjmcmc convert_table
+ldhelmet: build/ldhelmet.o common find_confs table_gen post_to_text max_lk pade rjmcmc
 	$(CC) $(CFLAGS) $(LFLAGS) -o ldhelmet build/ldhelmet.o build/*/*.o $(LIB)
 
-build/ldhelmet.o: src/ldhelmet.cc src/common/version_number.h src/find_confs/find_confs_component.h src/table_gen/table_gen_component.h src/post_to_text/post_to_text_component.h src/max_lk/max_lk_component.h src/pade/pade_component.h src/convert_table/convert_table_component.h
+build/ldhelmet.o: src/ldhelmet.cc src/common/version_number.h src/find_confs/find_confs_component.h src/table_gen/table_gen_component.h src/post_to_text/post_to_text_component.h src/max_lk/max_lk_component.h src/pade/pade_component.h
 	$(CC) $(CFLAGS) -c -o build/ldhelmet.o src/ldhelmet.cc
 
 clean:
