@@ -58,19 +58,25 @@ class Rjmcmc {
   void run();
 
    // Update MCMC state for parallel tempering.
-  void Update_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+  void Update_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local);
 
   // Change rate of block for parallel tempering.
-  void PerformChange_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+  void PerformChange_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local);
 
   // Extend endpoint of block for parallel tempering.
-  void PerformExtend_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+  void PerformExtend_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local);
 
   // Split block into two blocks for parallel tempering.
-  void PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+  void PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local);
 
   // Merge two blocks into one block for parallel tempering.
-  void PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+  void PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local);
+
+  double ProposeLogLk_Tempering(size_t left_snp_id, size_t right_snp_id, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local);
+
+  void UpdateLogLkMap_Tempering(size_t left_snp_id, size_t right_snp_id, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local);
+
+  void RecordSample_Tempering(std::vector<ChangePoint> *change_points_local);
 
   // Update MCMC state.
   void Update();
@@ -92,7 +98,6 @@ class Rjmcmc {
 
   // Updates the log likelihood map.
   void UpdateLogLkMap(size_t left_snp_id, size_t right_snp_id);
-
 
   // Updates cum_rho_map_.
   void UpdateCumRhoMap(std::vector<double> *in_cum_rho_map,
