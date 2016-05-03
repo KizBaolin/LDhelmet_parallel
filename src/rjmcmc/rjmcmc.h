@@ -57,9 +57,23 @@ class Rjmcmc {
   // Run iterations.
   void run();
 
+   // Update MCMC state for parallel tempering.
+  void Update_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+
+  // Change rate of block for parallel tempering.
+  void PerformChange_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+
+  // Extend endpoint of block for parallel tempering.
+  void PerformExtend_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+
+  // Split block into two blocks for parallel tempering.
+  void PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+
+  // Merge two blocks into one block for parallel tempering.
+  void PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local);
+
   // Update MCMC state.
-  void Update(uint64_t& iteration_id_local);
-  // void Update();
+  void Update();
 
   // Change rate of block.
   void PerformChange();

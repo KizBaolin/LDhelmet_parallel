@@ -138,22 +138,18 @@ Rjmcmc::Rjmcmc(
 }
 
 void Rjmcmc::run() {
-  uint64_t iteration_id_local = 0;
 
   burn_in_p_ = true;  // Needed for acceptance logger.
   for (uint32_t iteration = 0; iteration < burn_in_; ++iteration) {
-    Update(iteration_id_local);
+    Update();
     assert(change_points_.size() >= 2);
   }
-  printf("After burn in %" PRId64 "\n", iteration_id_local);
 
   burn_in_p_ = false;  // Needed for acceptance logger.
 
   //*****************************************Parallel Tempering stuff******************************//
   int nthreads = 1;
-
   printf("Number of threads = %d\n", nthreads);
-
   omp_set_num_threads(nthreads);
 
   std::vector<double> T;
@@ -162,17 +158,33 @@ void Rjmcmc::run() {
   T.resize(nthreads);
   lpost_new.resize(nthreads);
   lpost.resize(nthreads);
-
-  for (int i = 0; i < nthreads; ++i)
-  {
+  for (int i = 0; i < nthreads; ++i) {
     T[i]=pow(i,temp_const_);
   }
-
   int rank, rank_partner;
 
+  //inititalize class data members as local variables
+  double cur_log_lk_local;
+  // std::vector<ChangePoint> change_points_local;
+  // std::vector<double> cum_rho_map_local;
+  std::vector<double> proposed_cum_rho_map_local;
+  // LogLkMap log_lk_map_local;
+  // LogLkMap proposed_log_lk_map_local;
+  // PostRhoMap post_rho_map_local;
+
+  printf("Print cur_log_lk Before pragma %f \n", cur_log_lk);
+
   /* Fork a team of threads giving them their own copies of variables */
-  #pragma omp parallel private(nthreads, rank, rank_partner, iteration_id_local) shared(T, lpost_new, lpost)
+  #pragma omp parallel private(rank, rank_partner, cur_log_lk_local, proposed_cum_rho_map_local) shared(T, lpost_new, lpost)
   {
+    cur_log_lk_local = cur_log_lk;
+    // change_points_local = change_points_;
+    // cum_rho_map_local = cum_rho_map_;
+    proposed_cum_rho_map_local = proposed_cum_rho_map_;
+    // log_lk_map_local = log_lk_map_;
+    // proposed_log_lk_map_local = proposed_log_lk_map_;
+    // post_rho_map_local = post_rho_map_;
+
     /* Obtain thread number */
     rank = omp_get_thread_num();
     printf("Hello World from thread = %d\n", rank);
@@ -182,16 +194,24 @@ void Rjmcmc::run() {
         RecordSample();
       }
 
-      Update(iteration_id_local);
+      Update_Tempering(&cur_log_lk_local, &proposed_cum_rho_map_local);
+      // Update();
       assert(change_points_.size() >= 2);
+
+      // printf("Print cur_log_lk_local after pragma %f \n", cur_log_lk_local);
+      // printf("Print cur_log_lk after pragma %f \n", cur_log_lk);
 
       post_rho_map_.Update(snp_pos_, cum_rho_map_);
     }
     
-    printf("After running %" PRId64 "\n", iteration_id_local);
-
     //Reset class data members
-    iteration_id_ = iteration_id_local;
+    cur_log_lk = cur_log_lk_local;
+    // change_points_ = change_points_local;
+    // cum_rho_map_ = cum_rho_map_local;
+    proposed_cum_rho_map_ = proposed_cum_rho_map_local;
+    // log_lk_map_ = log_lk_map_local;
+    // proposed_log_lk_map_ = proposed_log_lk_map_local;
+    // post_rho_map_ = post_rho_map_local;
 
     // #pragma omp barrier      //Synchronise Threads
 
@@ -213,7 +233,389 @@ void Rjmcmc::run() {
 
 }
 
-void Rjmcmc::Update(uint64_t& iteration_id_local) {
+/************************************************************Parallel Tempering Methods BEGIN**********************************/
+void Rjmcmc::Update_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local) {
+  double uniform_variate = uniform_gen_();
+  if (uniform_variate < proposals_.cum_.change) {
+    PerformChange_Tempering(cur_log_lk_local, proposed_cum_rho_map_local);
+  } else if (uniform_variate < proposals_.cum_.extend) {
+    PerformExtend_Tempering(cur_log_lk_local, proposed_cum_rho_map_local);
+  } else if (uniform_variate < proposals_.cum_.split) {
+    PerformSplit_Tempering(cur_log_lk_local, proposed_cum_rho_map_local);
+  } else if (uniform_variate < proposals_.cum_.merge) {
+    PerformMerge_Tempering(cur_log_lk_local, proposed_cum_rho_map_local);
+  } else {
+    fprintf(stderr, "Error in proposal distribution in Update().\n");
+  }
+
+}
+
+void Rjmcmc::PerformChange_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local) {
+  // Choose change point uniformly.
+  size_t change_point_id = static_cast<size_t>(
+      rng_.GetUniformIntGen(0, change_points_.size() - 2)());
+  assert(change_point_id < change_points_.size() - 1);
+
+  // Compute new rate.
+  double old_rate = change_points_[change_point_id].rate_;
+  double uniform_variate = rate_change_gen_();
+  double new_rate = old_rate * std::exp(uniform_variate);
+
+  // Change state to proposed state.
+  change_points_[change_point_id].rate_ = new_rate;
+
+  UpdateCumRhoMap(proposed_cum_rho_map_local, change_point_id);
+
+  size_t left_snp_id = change_points_[change_point_id].snp_id_;
+  size_t right_snp_id = change_points_[change_point_id + 1].snp_id_;
+
+  double proposed_log_lk = ProposeLogLk(left_snp_id, right_snp_id);
+
+  // log(lk_new/lk_old * prop_new_to_old/prop_old_to_new
+  //   * prior_new/prior_old) (with simplifications)
+
+  double log_mh = acceptance_ratio_.LogMHChange(proposed_log_lk,
+                                                *cur_log_lk_local,
+                                                new_rate,
+                                                old_rate);
+  assert(!std::isnan(log_mh));
+
+  double log_accept = std::min(log_mh, 0.0);
+
+  double accept_variate = uniform_gen_();
+
+  if (std::log(accept_variate) < log_accept) {
+    // Accept proposed state.
+    *cur_log_lk_local = proposed_log_lk;
+    
+    // printf("Print cur_log_lk_local in perform change %f \n", cur_log_lk_local);
+
+    UpdateLogLkMap(left_snp_id, right_snp_id);
+    CopyCumRhoMap(proposed_cum_rho_map_local,
+                  &cum_rho_map_,
+                  change_points_[change_point_id].snp_id_);
+
+    if (burn_in_p_) {
+      accept_log_burn_in_.AcceptChange(true);
+    } else {
+      accept_log_run_.AcceptChange(true);
+    }
+  } else {
+    // Reject proposed state.
+    // Reset state.
+    change_points_[change_point_id].rate_ = old_rate;
+    CopyCumRhoMap(&cum_rho_map_,
+                  proposed_cum_rho_map_local,
+                  change_points_[change_point_id].snp_id_);
+    if (burn_in_p_) {
+      accept_log_burn_in_.AcceptChange(false);
+    } else {
+      accept_log_run_.AcceptChange(false);
+    }
+  }
+}
+
+void Rjmcmc::PerformExtend_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local) {
+  assert(change_points_.size() >= 2);
+
+  if (change_points_.size() == 2) {
+    return;  // No change points can be removed; return immediately.
+  } else {
+    // Choose change point uniformly, excluding the first and last
+    // change points.
+    size_t change_point_id = static_cast<size_t>(
+        rng_.GetUniformIntGen(1, change_points_.size() - 2)());
+
+    assert(change_points_[change_point_id + 1].snp_id_
+             - change_points_[change_point_id - 1].snp_id_ > 1);
+
+    // Choose new position uniformly from available interval.
+    size_t prev_snp_id = change_points_[change_point_id - 1].snp_id_;
+    size_t next_snp_id = change_points_[change_point_id + 1].snp_id_;
+
+    size_t new_snp_id = static_cast<size_t>(
+        rng_.GetUniformIntGen(prev_snp_id + 1, next_snp_id - 1)());
+
+    // change state to proposed state
+    size_t old_snp_id = change_points_[change_point_id].snp_id_;
+    change_points_[change_point_id].snp_id_ = new_snp_id;
+
+    assert(change_point_id > 0);
+
+    UpdateCumRhoMap(
+        proposed_cum_rho_map_local,
+        old_snp_id <= new_snp_id ? change_point_id - 1 : change_point_id);
+
+    size_t left_snp_id = std::min(old_snp_id, new_snp_id);
+    size_t right_snp_id = std::max(old_snp_id, new_snp_id);
+
+    double proposed_log_lk = ProposeLogLk(left_snp_id, right_snp_id);
+
+    double log_mh =
+      acceptance_ratio_.LogMHExtend(proposed_log_lk, *cur_log_lk_local);
+
+    assert(!std::isnan(log_mh));
+
+    double log_accept = std::min(log_mh, 0.0);
+
+    double accept_variate = uniform_gen_();
+
+    if (std::log(accept_variate) < log_accept) {
+      // Accept proposed state.
+      *cur_log_lk_local = proposed_log_lk;
+      UpdateLogLkMap(left_snp_id, right_snp_id);
+      CopyCumRhoMap(proposed_cum_rho_map_local,
+                    &cum_rho_map_,
+                    std::min(old_snp_id, new_snp_id));
+
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptExtend(true);
+      } else {
+        accept_log_run_.AcceptExtend(true);
+      }
+    } else {
+      // Reject proposed state.
+      // Reset state.
+      change_points_[change_point_id].snp_id_ = old_snp_id;
+      CopyCumRhoMap(&cum_rho_map_,
+                    proposed_cum_rho_map_local,
+                    std::min(old_snp_id, new_snp_id));
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptExtend(false);
+      } else {
+        accept_log_run_.AcceptExtend(false);
+      }
+    }
+    return;
+  }
+}
+
+void Rjmcmc::PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local) {
+  size_t num_snps = snp_pos_.size();
+  size_t split_point_snp_id = static_cast<size_t>(
+      rng_.GetUniformIntGen(1, num_snps - 2)());
+
+  size_t left_change_point_id, right_change_point_id;
+
+  boost::tie(left_change_point_id, right_change_point_id) =
+    BinarySearch(change_points_,
+                 ChangePoint(split_point_snp_id, 0.0),
+                 CompareSnpID());
+
+  assert(right_change_point_id < change_points_.size());
+
+  if (change_points_[left_change_point_id].snp_id_ == split_point_snp_id) {
+    // We chose a snp that's already a change point;
+    // return immediately.
+    rechosen_snp_ += 1;
+    return;
+  } else {
+    // Choose new rates for splitting up old rate into two new rates.
+    double u = uniform_gen_();
+    double old_rate = change_points_[left_change_point_id].rate_;
+
+    uint32_t right_pos1 =
+      snp_pos_[change_points_[right_change_point_id].snp_id_];
+    uint32_t left_pos1 =
+      snp_pos_[change_points_[left_change_point_id].snp_id_];
+    uint32_t new_pos1 = snp_pos_[split_point_snp_id];
+
+    double new_left_rate =
+      old_rate
+      * std::pow(u / (1.0 - u),
+                 static_cast<double>(right_pos1 - new_pos1)
+                   / static_cast<double>(right_pos1 - left_pos1));
+    double new_split_rate = ((1.0 - u) / u) * new_left_rate;
+
+    // Needed for acceptance ratio.
+    size_t orig_num_change_points = change_points_.size();
+    assert(orig_num_change_points >= 2);
+
+    // Construct proposed state:
+    //   Insert new change point.
+    //   Insert right block.
+    // This invalidates indexes that follow the newly inserted
+    // change point (i.e. any index starting from right_change_point_id
+    // onward)
+    change_points_.insert(change_points_.begin() + right_change_point_id,
+                          ChangePoint(split_point_snp_id, new_split_rate));
+    size_t new_right_change_point_id = right_change_point_id + 1;
+    size_t split_change_point_id = right_change_point_id;
+
+    assert(change_points_.size() >= 2);
+
+    // Change the left block.
+    change_points_[left_change_point_id].rate_ = new_left_rate;
+
+    // Log likelihood of proposed state.
+
+    // Compute new log lk.
+    UpdateCumRhoMap(proposed_cum_rho_map_local, left_change_point_id);
+
+    size_t left_snp_id = change_points_[left_change_point_id].snp_id_;
+    size_t right_snp_id = change_points_[new_right_change_point_id].snp_id_;
+
+    double proposed_log_lk = ProposeLogLk(left_snp_id, right_snp_id);
+
+    double log_mh =
+        acceptance_ratio_.LogMHSplit(proposed_log_lk,
+                                     *cur_log_lk_local,
+                                     num_snps,
+                                     orig_num_change_points,
+                                     new_left_rate,
+                                     new_split_rate,
+                                     old_rate,
+                                     proposals_);
+    assert(!std::isnan(log_mh));
+
+    double log_accept = std::min(log_mh, 0.0);
+
+    double accept_variate = uniform_gen_();
+
+    if (std::log(accept_variate) < log_accept) {
+      // Change state.
+      *cur_log_lk_local = proposed_log_lk;
+      UpdateLogLkMap(left_snp_id, right_snp_id);
+      CopyCumRhoMap(proposed_cum_rho_map_local,
+                    &cum_rho_map_,
+                    change_points_[left_change_point_id].snp_id_);
+
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptSplit(true);
+      } else {
+        accept_log_run_.AcceptSplit(true);
+      }
+    } else {
+      // Don't change state.
+      // Reset state.
+      change_points_.erase(change_points_.begin() + split_change_point_id);
+      change_points_[left_change_point_id].rate_ = old_rate;
+      CopyCumRhoMap(&cum_rho_map_,
+                    proposed_cum_rho_map_local,
+                    change_points_[left_change_point_id].snp_id_);
+
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptSplit(false);
+      } else {
+        accept_log_run_.AcceptSplit(false);
+      }
+    }
+
+    return;
+  }
+}
+
+void Rjmcmc::PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double> *proposed_cum_rho_map_local) {
+  assert(change_points_.size() >= 2);
+  if (change_points_.size() == 2) {
+    return;  // No change points can be removed; return immediately.
+  } else {
+    size_t num_snps = snp_pos_.size();
+    size_t merge_change_point_id = static_cast<size_t>(
+        rng_.GetUniformIntGen(1, change_points_.size() - 2)());
+
+    size_t left_change_point_id = merge_change_point_id - 1;
+    size_t right_change_point_id = merge_change_point_id + 1;
+    assert(right_change_point_id < change_points_.size());
+
+    // Compute new rate for merged block.
+    double left_pos1 =
+        snp_pos_[change_points_[left_change_point_id].snp_id_];
+    double right_pos1 =
+        snp_pos_[change_points_[right_change_point_id].snp_id_];
+    double mergePos1 =
+        snp_pos_[change_points_[merge_change_point_id].snp_id_];
+
+    double left_rate = change_points_[left_change_point_id].rate_;
+    double merge_rate = change_points_[merge_change_point_id].rate_;
+
+    double new_rate =
+      std::pow(left_rate,
+               static_cast<double>(mergePos1 - left_pos1)
+                 / static_cast<double>(right_pos1 - left_pos1))
+    * std::pow(merge_rate,
+               static_cast<double>(right_pos1 - mergePos1)
+                 / static_cast<double>(right_pos1 - left_pos1));
+
+    // Record snp_id of change point to be removed.
+    uint32_t merge_snp_id = change_points_[merge_change_point_id].snp_id_;
+
+    size_t orig_num_change_points = change_points_.size();
+    assert(orig_num_change_points >= 2);
+
+    // Construct proposed state.
+    // Remove merge point.
+    change_points_.erase(change_points_.begin() + merge_change_point_id);
+
+    // Set rate of left point.
+    change_points_[left_change_point_id].rate_ = new_rate;
+
+    // Compute new log lk.
+    UpdateCumRhoMap(proposed_cum_rho_map_local, left_change_point_id);
+
+    size_t left_snp_id = change_points_[left_change_point_id].snp_id_;
+    size_t right_snp_id = change_points_[right_change_point_id].snp_id_;
+
+    double proposed_log_lk = ProposeLogLk(left_snp_id, right_snp_id);
+
+    // Log Metropolis-Hasting ratio:
+    double log_mh =
+      acceptance_ratio_.LogMHMerge(proposed_log_lk,
+                                   *cur_log_lk_local,
+                                   num_snps,
+                                   orig_num_change_points,
+                                   left_rate,
+                                   merge_rate,
+                                   new_rate,
+                                   proposals_);
+    assert(!std::isnan(log_mh));
+
+    double log_accept = std::min(log_mh, 0.0);
+
+    double accept_variate = uniform_gen_();
+
+    if (std::log(accept_variate) < log_accept) {
+      // Change state.
+      *cur_log_lk_local = proposed_log_lk;
+      UpdateLogLkMap(left_snp_id, right_snp_id);
+      CopyCumRhoMap(proposed_cum_rho_map_local,
+                    &cum_rho_map_,
+                    change_points_[left_change_point_id].snp_id_);
+
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptMerge(true);
+      } else {
+        accept_log_run_.AcceptMerge(true);
+      }
+    } else {
+      // Reject proposed state.
+      // Reset state.
+      change_points_.insert(
+          change_points_.begin() + merge_change_point_id,
+          ChangePoint(merge_snp_id, merge_rate));
+
+      change_points_[left_change_point_id].rate_ = left_rate;
+
+      CopyCumRhoMap(&cum_rho_map_,
+                    proposed_cum_rho_map_local,
+                    change_points_[left_change_point_id].snp_id_);
+
+      // Reset log lk.
+      if (burn_in_p_) {
+        accept_log_burn_in_.AcceptMerge(false);
+      } else {
+        accept_log_run_.AcceptMerge(false);
+      }
+    }
+
+    return;
+  }
+}
+
+
+/************************************************************Parallel Tempering Methods END**********************************/
+
+void Rjmcmc::Update() {
   double uniform_variate = uniform_gen_();
   if (uniform_variate < proposals_.cum_.change) {
     PerformChange();
@@ -227,8 +629,6 @@ void Rjmcmc::Update(uint64_t& iteration_id_local) {
     fprintf(stderr, "Error in proposal distribution in Update().\n");
   }
 
-  // ++iteration_id_;
-  ++iteration_id_local;
 }
 
 void Rjmcmc::PerformChange() {
