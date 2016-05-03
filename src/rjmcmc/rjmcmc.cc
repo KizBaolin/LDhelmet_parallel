@@ -170,30 +170,30 @@ void Rjmcmc::run() {
   std::vector<ChangePoint> change_points_local;
   LogLkMap log_lk_map_local;
   LogLkMap proposed_log_lk_map_local;
-  PostRhoMap post_rho_map_local(snp_pos_.size());
 
   printf("Print cur_log_lk Before pragma %f \n", cur_log_lk);
 
   /* Fork a team of threads giving them their own copies of variables */
-  #pragma omp parallel private(rank, rank_partner, cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local) shared(T, lpost_new, lpost)
+  #pragma omp parallel private(rank, rank_partner, cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local) shared(lpost_new, lpost)
   {
-    cur_log_lk_local = cur_log_lk;
+    rank = omp_get_thread_num();
+    printf("Hello World from thread = %d\n", rank);
+    
+    PostRhoMap post_rho_map_local(snp_pos_.size());
+
+    cur_log_lk_local = T[rank]*cur_log_lk;
     change_points_local = change_points_;
     cum_rho_map_local = cum_rho_map_;
     proposed_cum_rho_map_local = proposed_cum_rho_map_;
     log_lk_map_local = log_lk_map_;
     proposed_log_lk_map_local = proposed_log_lk_map_;
 
-    rank = omp_get_thread_num();
-    printf("Hello World from thread = %d\n", rank);
-
     for (uint32_t iteration = 0; iteration < num_iter_; ++iteration) {
       if (rank == 0) {
         RecordSample_Tempering(&change_points_local);
       }
 
-      Update_Tempering(&cur_log_lk_local, &cum_rho_map_local, &proposed_cum_rho_map_local, &change_points_local, &log_lk_map_local, &proposed_log_lk_map_local, &post_rho_map_local);
-      // Update();
+      Update_Tempering(&cur_log_lk_local, &cum_rho_map_local, &proposed_cum_rho_map_local, &change_points_local, &log_lk_map_local, &proposed_log_lk_map_local, &post_rho_map_local, T[rank]);
       assert(change_points_local.size() >= 2);
 
       // printf("Print cur_log_lk_local after pragma %f \n", cur_log_lk_local);
@@ -235,16 +235,16 @@ void Rjmcmc::run() {
 
 /************************************************************Parallel Tempering Methods BEGIN**********************************/
 void Rjmcmc::Update_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, 
-  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local) {
+  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local, int thread_temp) {
   double uniform_variate = uniform_gen_();
   if (uniform_variate < proposals_.cum_.change) {
-    PerformChange_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local);
+    PerformChange_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local, thread_temp);
   } else if (uniform_variate < proposals_.cum_.extend) {
-    PerformExtend_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local);
+    PerformExtend_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local, thread_temp);
   } else if (uniform_variate < proposals_.cum_.split) {
-    PerformSplit_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local);
+    PerformSplit_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local, thread_temp);
   } else if (uniform_variate < proposals_.cum_.merge) {
-    PerformMerge_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local);
+    PerformMerge_Tempering(cur_log_lk_local, cum_rho_map_local, proposed_cum_rho_map_local, change_points_local, log_lk_map_local, proposed_log_lk_map_local, post_rho_map_local, thread_temp);
   } else {
     fprintf(stderr, "Error in proposal distribution in Update().\n");
   }
@@ -252,7 +252,7 @@ void Rjmcmc::Update_Tempering(double *cur_log_lk_local, std::vector<double> *cum
 }
 
 void Rjmcmc::PerformChange_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, 
-  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local) {
+  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local, int thread_temp) {
   // Choose change point uniformly.
   size_t change_point_id = static_cast<size_t>(
       rng_.GetUniformIntGen(0, change_points_local->size() - 2)());
@@ -271,7 +271,7 @@ void Rjmcmc::PerformChange_Tempering(double *cur_log_lk_local, std::vector<doubl
   size_t left_snp_id = change_points_local->at(change_point_id).snp_id_;
   size_t right_snp_id = change_points_local->at(change_point_id + 1).snp_id_;
 
-  double proposed_log_lk = ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
+  double proposed_log_lk = thread_temp*ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
 
   // log(lk_new/lk_old * prop_new_to_old/prop_old_to_new
   //   * prior_new/prior_old) (with simplifications)
@@ -318,7 +318,7 @@ void Rjmcmc::PerformChange_Tempering(double *cur_log_lk_local, std::vector<doubl
 }
 
 void Rjmcmc::PerformExtend_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, 
-  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local) {
+  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local, int thread_temp) {
   assert(change_points_local->size() >= 2);
 
   if (change_points_local->size() == 2) {
@@ -352,7 +352,7 @@ void Rjmcmc::PerformExtend_Tempering(double *cur_log_lk_local, std::vector<doubl
     size_t left_snp_id = std::min(old_snp_id, new_snp_id);
     size_t right_snp_id = std::max(old_snp_id, new_snp_id);
 
-    double proposed_log_lk = ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
+    double proposed_log_lk = thread_temp*ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
 
     double log_mh =
       acceptance_ratio_.LogMHExtend(proposed_log_lk, *cur_log_lk_local);
@@ -394,7 +394,7 @@ void Rjmcmc::PerformExtend_Tempering(double *cur_log_lk_local, std::vector<doubl
 }
 
 void Rjmcmc::PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, 
-  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local) {
+  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local, int thread_temp) {
   size_t num_snps = snp_pos_.size();
   size_t split_point_snp_id = static_cast<size_t>(
       rng_.GetUniformIntGen(1, num_snps - 2)());
@@ -459,7 +459,7 @@ void Rjmcmc::PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double
     size_t left_snp_id = change_points_local->at(left_change_point_id).snp_id_;
     size_t right_snp_id = change_points_local->at(new_right_change_point_id).snp_id_;
 
-    double proposed_log_lk = ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
+    double proposed_log_lk = thread_temp * ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
 
     double log_mh =
         acceptance_ratio_.LogMHSplit(proposed_log_lk,
@@ -510,7 +510,7 @@ void Rjmcmc::PerformSplit_Tempering(double *cur_log_lk_local, std::vector<double
 }
 
 void Rjmcmc::PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double> *cum_rho_map_local, std::vector<double> *proposed_cum_rho_map_local, 
-  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local) {
+  std::vector<ChangePoint> *change_points_local, LogLkMap *log_lk_map_local, LogLkMap *proposed_log_lk_map_local, PostRhoMap *post_rho_map_local, int thread_temp) {
   assert(change_points_local->size() >= 2);
   if (change_points_local->size() == 2) {
     return;  // No change points can be removed; return immediately.
@@ -561,7 +561,7 @@ void Rjmcmc::PerformMerge_Tempering(double *cur_log_lk_local, std::vector<double
     size_t left_snp_id = change_points_local->at(left_change_point_id).snp_id_;
     size_t right_snp_id = change_points_local->at(right_change_point_id).snp_id_;
 
-    double proposed_log_lk = ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
+    double proposed_log_lk = thread_temp * ProposeLogLk_Tempering(left_snp_id, right_snp_id, log_lk_map_local, proposed_log_lk_map_local);
 
     // Log Metropolis-Hasting ratio:
     double log_mh =
