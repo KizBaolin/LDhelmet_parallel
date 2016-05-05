@@ -109,7 +109,7 @@ int PostToTextComponent(std::string const base_command,
     num_read = fread(reinterpret_cast<char *>(&num_samps_part),
                      sizeof(num_samps_part), 1, fp_in);
     assert(num_read == 1);
-    assert(num_samps_part == params.num_samps_);
+    // assert(num_samps_part == params.num_samps_);
 
     uint64_t begin_part = params.snp_partitions_[part_id].first;
     uint64_t end_part   = params.snp_partitions_[part_id].second;
